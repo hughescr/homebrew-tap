@@ -1,4 +1,4 @@
-class Ggmorse < Formula
+class Libggmorse < Formula
     desc "Morse code decoding library"
     homepage "https://github.com/ggerganov/ggmorse"
     url "https://github.com/ggerganov/ggmorse/archive/8fb433d.tar.gz"
@@ -7,6 +7,7 @@ class Ggmorse < Formula
     license "MIT"
 
     depends_on "cmake" => :build
+    depends_on "pkg-config" => :test
 
     def install
         cmake_args = %W[
@@ -17,9 +18,27 @@ class Ggmorse < Formula
         system "cmake", "-S", ".", "-B", "build", *std_cmake_args, *cmake_args
         system "cmake", "--build", "build"
         system "cmake", "--install", "build"
+
+        # Generate a pkg-config file since upstream does not ship one.
+        (buildpath/"libggmorse.pc").write <<~EOS
+prefix=#{opt_prefix}
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: libggmorse
+Description: Morse code decoding library
+Version: #{version}
+Libs: -L${libdir} -lggmorse
+Cflags: -I${includedir}
+        EOS
+        (lib/"pkgconfig").install "libggmorse.pc"
     end
 
     test do
+        # Verify pkg-config registration and that we can compile and link.
+        system "pkg-config", "--cflags", "--libs", "libggmorse"
+
         (testpath/"test.cpp").write <<~EOS
 #include "ggmorse/ggmorse.h"
 
@@ -28,7 +47,8 @@ int main() {
     return 0;
 }
         EOS
-        system ENV.cxx, "test.cpp", "-std=c++17", "-I#{include}", "-L#{lib}", "-lggmorse", "-o", "test"
+        flags = shell_output("pkg-config --cflags --libs libggmorse").split
+        system ENV.cxx, "test.cpp", "-std=c++17", *flags, "-o", "test"
         system "./test"
     end
 end
